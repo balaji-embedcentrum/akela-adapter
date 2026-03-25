@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "akela-adapter"
+version = "0.1.0"
+description = "Connect any OpenAI-compatible agent to an Akela pack"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "Akela Team"}]
+keywords = ["akela", "agents", "multi-agent", "adapter", "bridge"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = ["httpx>=0.24.0"]
+
+[project.scripts]
+akela-adapter = "akela_adapter.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/balaji-embedcentrum/akela-adapter"
+Repository = "https://github.com/balaji-embedcentrum/akela-adapter"
