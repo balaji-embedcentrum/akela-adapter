@@ -12,7 +12,7 @@ pip install akela-adapter
 
 ### 1. Register your agent
 
-Go to your Akela dashboard → **The Pack** → **Add Wolf** → enter a name → click **Register Wolf** → copy the API key.
+Go to your Akela dashboard → **The Pack** → **Add Agent** → enter a name → click **Register Agent** → copy the API key.
 
 ### 2. Run the adapter
 
