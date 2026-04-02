@@ -5,15 +5,18 @@ Connects ANY OpenAI-compatible agent to an Akela pack.
 The agent knows nothing about Akela — this adapter handles all communication.
 
 Only needs:
-  - AKELA_API_URL: The Akela API base URL
-  - AKELA_API_KEY: Agent's API key (from Pack UI registration)
-  - AGENT_ENDPOINT_URL: Local agent's OpenAI-compatible endpoint
-  - AGENT_NAME: Agent's registered name in Akela
+  - AKELA_API_KEY: Agent's API key (generated in akela-ai dashboard)
+  - AGENT_ENDPOINT_URL: Local agent's OpenAI-compatible endpoint (default: http://localhost:8642)
+
+Optional (self-hosters only):
+  - AKELA_API_URL: Override the Akela API base URL (default: https://api.akela-ai.com)
 """
 import os
 import json
 import asyncio
 import httpx
+
+DEFAULT_AKELA_API_URL = "https://api.akela-ai.com"
 
 
 class AkelaAdapter:
@@ -21,17 +24,18 @@ class AkelaAdapter:
 
     def __init__(
         self,
-        api_url: str,
         api_key: str,
+        api_url: str = DEFAULT_AKELA_API_URL,
         agent_endpoint: str = "http://localhost:8642",
-        agent_name: str = "external-agent",
+        agent_name: str = "",
         model: str = "default",
         agent_endpoint_key: str = "",
     ):
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.agent_endpoint = agent_endpoint.rstrip("/")
-        self.agent_name = agent_name
+        # agent_name is resolved from server on connect — no need to set manually
+        self.agent_name = agent_name or "connecting..."
         self.model = model
         self.agent_endpoint_key = agent_endpoint_key
         self.agent_uuid = None
@@ -73,7 +77,7 @@ class AkelaAdapter:
     # ── Post response to Akela ───────────────────────────────────────
     async def post_to_akela(self, room: str, content: str, mention_type: str = "direct"):
         """Post a message back to Akela as this agent."""
-        url = f"{self.api_url}/chat/agent-message"
+        url = f"{self.api_url}/api/chat/agent-message"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
@@ -93,7 +97,7 @@ class AkelaAdapter:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(f"{self.api_url}/chat/typing", json={"room": room}, headers=headers)
+                await client.post(f"{self.api_url}/api/chat/typing", json={"room": room}, headers=headers)
         except:
             pass
 
@@ -128,19 +132,24 @@ class AkelaAdapter:
     # ── SSE Listener ─────────────────────────────────────────────────
     async def listen(self):
         """Subscribe to Akela API via SSE and listen for messages."""
-        subscribe_url = f"{self.api_url}/chat/subscribe/agent?token={self.api_key}"
-        self._log("📡 Connecting to Akela...")
+        subscribe_url = f"{self.api_url}/api/chat/subscribe/agent"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        self._log(f"Connecting to {self.api_url} ...")
 
         while True:
             try:
                 async with httpx.AsyncClient(timeout=None) as client:
-                    async with client.stream("GET", subscribe_url) as response:
+                    async with client.stream("GET", subscribe_url, headers=headers) as response:
+                        if response.status_code == 401:
+                            self._log("Invalid API key — check AKELA_API_KEY")
+                            await asyncio.sleep(30)
+                            continue
                         if response.status_code != 200:
-                            self._log(f"SSE failed: {response.status_code}")
+                            self._log(f"SSE failed: {response.status_code} — retrying in 5s...")
                             await asyncio.sleep(5)
                             continue
 
-                        self._log("✅ Connected — listening for messages")
+                        self._log("Connected — listening for tasks")
 
                         async for line in response.aiter_lines():
                             if not line or line.startswith(":"):
@@ -150,11 +159,12 @@ class AkelaAdapter:
                                     data = json.loads(line[6:])
                                     if data.get("type") == "connected":
                                         self.agent_uuid = data.get("agent_id")
-                                        self._log(f"🔗 Registered as {data.get('agent_name')} ({self.agent_uuid})")
+                                        self.agent_name = data.get("agent_name", self.agent_name)
+                                        self._log(f"Registered as '{self.agent_name}' (id: {self.agent_uuid})")
                                         continue
                                     if data.get("type") == "stop":
                                         self._stop_requested = True
-                                        self._log("🛑 Stop signal")
+                                        self._log("Stop signal received")
                                         continue
                                     if data.get("sender_name") == self.agent_name:
                                         continue
@@ -163,7 +173,7 @@ class AkelaAdapter:
                                 except json.JSONDecodeError:
                                     pass
             except Exception as e:
-                self._log(f"SSE error: {e} — reconnecting in 5s...")
+                self._log(f"Connection error: {e} — reconnecting in 5s...")
             await asyncio.sleep(5)
 
     # ── Heartbeat ────────────────────────────────────────────────────
@@ -172,20 +182,19 @@ class AkelaAdapter:
         await asyncio.sleep(5)
         while True:
             try:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    await client.put(f"{self.api_url}/agents/internal/heartbeat/{self.agent_name}")
-                    self._log("♥ Heartbeat OK")
+                    await client.put(f"{self.api_url}/api/agents/internal/heartbeat", headers=headers)
             except Exception as e:
-                self._log(f"♥ Heartbeat error: {e}")
+                self._log(f"Heartbeat error: {e}")
             await asyncio.sleep(20)
 
     # ── Run ──────────────────────────────────────────────────────────
     async def run(self):
         """Start the adapter — connects to Akela and listens for messages."""
-        self._log("🐺 Akela Adapter v0.1.0")
+        self._log(f"akela-adapter v0.2.0")
         self._log(f"  Akela API:  {self.api_url}")
         self._log(f"  Agent:      {self.agent_endpoint}")
-        self._log(f"  Name:       {self.agent_name}")
 
         # Wait for local agent to be ready
         endpoint = f"{self.agent_endpoint}/health"
@@ -195,7 +204,7 @@ class AkelaAdapter:
                 async with httpx.AsyncClient(timeout=3.0) as client:
                     resp = await client.get(endpoint)
                     if resp.status_code == 200:
-                        self._log("  ✅ Agent ready")
+                        self._log("  Agent ready")
                         break
             except:
                 pass

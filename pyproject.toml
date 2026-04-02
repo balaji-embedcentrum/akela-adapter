@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "akela-adapter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Connect any OpenAI-compatible agent to an Akela pack"
 readme = "README.md"
 license = {text = "MIT"}

@@ -2,34 +2,55 @@
 import argparse
 import asyncio
 import os
-from .adapter import AkelaAdapter
+from .adapter import AkelaAdapter, DEFAULT_AKELA_API_URL
 
 
 def main():
     parser = argparse.ArgumentParser(
         prog="akela-adapter",
         description="Connect any OpenAI-compatible agent to an Akela pack",
-        epilog="Example: akela-adapter --api-url http://akela.example.com:8200 --api-key akela_xxx --name my-agent",
+        epilog="Example: AKELA_API_KEY=ak_live_xxx akela-adapter",
     )
-    parser.add_argument("--api-url", default=os.getenv("AKELA_API_URL", ""), help="Akela API base URL (or AKELA_API_URL env)")
-    parser.add_argument("--api-key", default=os.getenv("AKELA_API_KEY", ""), help="Agent API key from Akela registration (or AKELA_API_KEY env)")
-    parser.add_argument("--agent-url", default=os.getenv("AGENT_ENDPOINT_URL", "http://localhost:8642"), help="Local agent endpoint (default: http://localhost:8642)")
-    parser.add_argument("--agent-key", default=os.getenv("AGENT_ENDPOINT_KEY", ""), help="Bearer token for agent endpoint if needed")
-    parser.add_argument("--name", default=os.getenv("AGENT_NAME", "external-agent"), help="Agent name as registered in Akela")
-    parser.add_argument("--model", default=os.getenv("LLM_MODEL", "default"), help="Model name to pass to agent")
+    parser.add_argument(
+        "--api-key",
+        default=os.getenv("AKELA_API_KEY", ""),
+        help="Agent API key from akela-ai dashboard (or AKELA_API_KEY env) — required",
+    )
+    parser.add_argument(
+        "--agent-url",
+        default=os.getenv("AGENT_ENDPOINT_URL", "http://localhost:8642"),
+        help="Local agent endpoint (default: http://localhost:8642)",
+    )
+    parser.add_argument(
+        "--agent-key",
+        default=os.getenv("AGENT_ENDPOINT_KEY", ""),
+        help="Bearer token for agent endpoint if needed",
+    )
+    parser.add_argument(
+        "--model",
+        default=os.getenv("LLM_MODEL", "default"),
+        help="Model name to pass to agent",
+    )
+    # Self-hosting override — not needed for akela-ai SaaS users
+    parser.add_argument(
+        "--api-url",
+        default=os.getenv("AKELA_API_URL", DEFAULT_AKELA_API_URL),
+        help=f"Akela API base URL (default: {DEFAULT_AKELA_API_URL}). Override only if self-hosting.",
+    )
 
     args = parser.parse_args()
 
-    if not args.api_url:
-        parser.error("--api-url is required (or set AKELA_API_URL)")
     if not args.api_key:
-        parser.error("--api-key is required (or set AKELA_API_KEY)")
+        parser.error(
+            "API key is required.\n"
+            "  Set it with: export AKELA_API_KEY=ak_live_xxxx\n"
+            "  Get your key from the akela-ai dashboard → agent settings."
+        )
 
     adapter = AkelaAdapter(
-        api_url=args.api_url,
         api_key=args.api_key,
+        api_url=args.api_url,
         agent_endpoint=args.agent_url,
-        agent_name=args.name,
         model=args.model,
         agent_endpoint_key=args.agent_key,
     )
